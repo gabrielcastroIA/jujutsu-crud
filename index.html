@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRUD API Simulada - Jujutsu Kaisen</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial, Helvetica, sans-serif;
+}
+
+body{
+    background:#111827;
+    color:white;
+    padding:20px;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+}
+
+h1{
+    text-align:center;
+    margin-bottom:20px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+}
+
+.card{
+    background:#1f2937;
+    padding:20px;
+    border-radius:10px;
+}
+
+input{
+    width:100%;
+    padding:10px;
+    margin-top:10px;
+    border:none;
+    border-radius:5px;
+}
+
+button{
+    padding:10px 15px;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    margin-top:10px;
+    margin-right:5px;
+    font-weight:bold;
+}
+
+.btn-add{
+    background:#16a34a;
+    color:white;
+}
+
+.btn-edit{
+    background:#f59e0b;
+    color:white;
+}
+
+.btn-delete{
+    background:#dc2626;
+    color:white;
+}
+
+.btn-load{
+    background:#2563eb;
+    color:white;
+}
+
+.personagem{
+    background:#374151;
+    padding:10px;
+    margin-top:10px;
+    border-radius:5px;
+}
+
+.status{
+    margin-top:15px;
+    padding:15px;
+    border-radius:8px;
+    font-size:18px;
+    font-weight:bold;
+}
+
+.success{
+    background:#14532d;
+}
+
+.error{
+    background:#7f1d1d;
+}
+
+.loading{
+    background:#1e40af;
+}
+
+.log{
+    max-height:300px;
+    overflow:auto;
+    margin-top:10px;
+}
+
+.log-item{
+    border-bottom:1px solid #555;
+    padding:8px 0;
+}
+
+@media(max-width:768px){
+    .grid{
+        grid-template-columns:1fr;
+    }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <h1>CRUD Simulado - Personagens de Jujutsu Kaisen</h1>
+
+    <div class="grid">
+
+        <div class="card">
+
+            <h2>Adicionar / Editar</h2>
+
+            <input type="hidden" id="id">
+
+            <input
+                type="text"
+                id="nome"
+                placeholder="Nome do personagem"
+            >
+
+            <input
+                type="text"
+                id="tecnica"
+                placeholder="Técnica Amaldiçoada"
+            >
+
+            <button class="btn-add" onclick="salvar()">
+                Salvar
+            </button>
+
+            <button onclick="limparFormulario()">
+                Limpar
+            </button>
+
+            <hr style="margin:20px 0">
+
+            <button class="btn-load" onclick="carregarDados()">
+                Carregar Dados (GET)
+            </button>
+
+            <div id="status" class="status">
+                Aguardando operação...
+            </div>
+
+        </div>
+
+        <div class="card">
+
+            <h2>Personagens</h2>
+
+            <div id="lista"></div>
+
+        </div>
+
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+        <h2>Histórico de Operações</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+</div>
+
+<script>
+
+/*
+=================================
+JSON LOCAL SIMULADO
+=================================
+*/
+
+const dadosIniciais = [
+    {
+        id:1,
+        nome:"Yuji Itadori",
+        tecnica:"Black Flash"
+    },
+    {
+        id:2,
+        nome:"Satoru Gojo",
+        tecnica:"Limitless"
+    },
+    {
+        id:3,
+        nome:"Megumi Fushiguro",
+        tecnica:"Ten Shadows"
+    },
+    {
+        id:4,
+        nome:"Nobara Kugisaki",
+        tecnica:"Straw Doll Technique"
+    }
+];
+
+const blob = new Blob(
+    [JSON.stringify(dadosIniciais)],
+    {type:"application/json"}
+);
+
+const jsonURL = URL.createObjectURL(blob);
+
+let personagens = [];
+
+/*
+=================================
+UTILIDADES
+=================================
+*/
+
+function delay(){
+    return Math.floor(Math.random()*1200)+800;
+}
+
+function atualizarStatus(code,texto,sucesso=true){
+
+    const status = document.getElementById("status");
+
+    status.className =
+        sucesso
+        ? "status success"
+        : "status error";
+
+    status.innerHTML =
+        `<strong>${code}</strong> - ${texto}`;
+}
+
+function loadingStatus(){
+
+    const status = document.getElementById("status");
+
+    status.className="status loading";
+    status.innerHTML="Processando requisição...";
+}
+
+function registrarLog(metodo,code,msg){
+
+    const log = document.getElementById("log");
+
+    const hora = new Date().toLocaleTimeString();
+
+    log.innerHTML =
+    `
+    <div class="log-item">
+        [${hora}] ${metodo}
+        → HTTP ${code}
+        (${msg})
+    </div>
+    ` + log.innerHTML;
+}
+
+/*
+=================================
+READ - GET
+=================================
+*/
+
+async function carregarDados(){
+
+    loadingStatus();
+
+    setTimeout(async ()=>{
+
+        try{
+
+            const resposta = await fetch(jsonURL);
+
+            if(!resposta.ok){
+                throw new Error();
+            }
+
+            personagens = await resposta.json();
+
+            renderizar();
+
+            atualizarStatus(
+                200,
+                "OK - Dados carregados"
+            );
+
+            registrarLog(
+                "GET",
+                200,
+                "Dados carregados"
+            );
+
+        }catch{
+
+            atualizarStatus(
+                500,
+                "Internal Server Error",
+                false
+            );
+
+            registrarLog(
+                "GET",
+                500,
+                "Erro servidor"
+            );
+        }
+
+    },delay());
+}
+
+/*
+=================================
+RENDER
+=================================
+*/
+
+function renderizar(){
+
+    const lista =
+    document.getElementById("lista");
+
+    lista.innerHTML="";
+
+    personagens.forEach(p=>{
+
+        lista.innerHTML += `
+        <div class="personagem">
+
+            <strong>${p.nome}</strong><br>
+            Técnica: ${p.tecnica}<br>
+            ID: ${p.id}
+
+            <br><br>
+
+            <button
+                class="btn-edit"
+                onclick="editar(${p.id})">
+                Editar
+            </button>
+
+            <button
+                class="btn-delete"
+                onclick="remover(${p.id})">
+                Excluir
+            </button>
+
+        </div>
+        `;
+    });
+}
+
+/*
+=================================
+CREATE + UPDATE
+=================================
+*/
+
+function salvar(){
+
+    const id =
+    document.getElementById("id").value;
+
+    const nome =
+    document.getElementById("nome").value.trim();
+
+    const tecnica =
+    document.getElementById("tecnica").value.trim();
+
+    loadingStatus();
+
+    setTimeout(()=>{
+
+        if(!nome || !tecnica){
+
+            atualizarStatus(
+                400,
+                "Bad Request - Campos obrigatórios",
+                false
+            );
+
+            registrarLog(
+                "POST/PUT",
+                400,
+                "Validação"
+            );
+
+            return;
+        }
+
+        if(id){
+
+            const index =
+            personagens.findIndex(
+                p => p.id == id
+            );
+
+            if(index === -1){
+
+                atualizarStatus(
+                    404,
+                    "Not Found",
+                    false
+                );
+
+                registrarLog(
+                    "PUT",
+                    404,
+                    "Registro não encontrado"
+                );
+
+                return;
+            }
+
+            personagens[index].nome = nome;
+            personagens[index].tecnica = tecnica;
+
+            renderizar();
+
+            atualizarStatus(
+                200,
+                "OK - Registro atualizado"
+            );
+
+            registrarLog(
+                "PUT",
+                200,
+                "Atualizado"
+            );
+
+        }else{
+
+            const novo = {
+                id: Date.now(),
+                nome,
+                tecnica
+            };
+
+            personagens.push(novo);
+
+            renderizar();
+
+            atualizarStatus(
+                201,
+                "Created - Registro criado"
+            );
+
+            registrarLog(
+                "POST",
+                201,
+                "Criado"
+            );
+        }
+
+        limparFormulario();
+
+    },delay());
+}
+
+/*
+=================================
+EDITAR
+=================================
+*/
+
+function editar(id){
+
+    const personagem =
+    personagens.find(
+        p => p.id == id
+    );
+
+    if(!personagem){
+
+        atualizarStatus(
+            404,
+            "Not Found",
+            false
+        );
+
+        registrarLog(
+            "GET",
+            404,
+            "Registro inexistente"
+        );
+
+        return;
+    }
+
+    document.getElementById("id").value =
+    personagem.id;
+
+    document.getElementById("nome").value =
+    personagem.nome;
+
+    document.getElementById("tecnica").value =
+    personagem.tecnica;
+}
+
+/*
+=================================
+DELETE
+=================================
+*/
+
+function remover(id){
+
+    if(!confirm(
+        "Deseja excluir este personagem?"
+    )){
+        return;
+    }
+
+    loadingStatus();
+
+    setTimeout(()=>{
+
+        const index =
+        personagens.findIndex(
+            p => p.id == id
+        );
+
+        if(index === -1){
+
+            atualizarStatus(
+                404,
+                "Not Found",
+                false
+            );
+
+            registrarLog(
+                "DELETE",
+                404,
+                "Não encontrado"
+            );
+
+            return;
+        }
+
+        personagens.splice(index,1);
+
+        renderizar();
+
+        atualizarStatus(
+            200,
+            "OK - Registro removido"
+        );
+
+        registrarLog(
+            "DELETE",
+            200,
+            "Removido"
+        );
+
+    },delay());
+
+}
+
+/*
+=================================
+LIMPAR
+=================================
+*/
+
+function limparFormulario(){
+
+    document.getElementById("id").value="";
+    document.getElementById("nome").value="";
+    document.getElementById("tecnica").value="";
+}
+
+/*
+=================================
+AUTO LOAD
+=================================
+*/
+
+carregarDados();
+
+</script>
+
+</body>
+</html>
